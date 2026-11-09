@@ -31,4 +31,4 @@ check "GET /v1/copies/copy-1 -> 200"   '"copy-1"'        curl -s localhost:8080/
 check "GET невідомий -> 404"           '404'             curl -s -o /dev/null -w '%{http_code}' localhost:8080/v1/copies/nope
 check "POST дубль -> 409"              '409'             bash -c "curl -s -o /dev/null -X POST localhost:8080/v1/copies -d '{\"book_id\":\"b\",\"inventory_number\":\"SMOKE-R\"}'; curl -s -o /dev/null -w '%{http_code}' -X POST localhost:8080/v1/copies -d '{\"book_id\":\"b\",\"inventory_number\":\"SMOKE-R\"}'"
 
-[ $fail -eq 0 ] && echo "ВСЕ ГАРАЗД" || { echo "Є ПОМИЛКИ"; exit 1; }
+[[ $fail -eq 0 ]] && echo "ВСЕ ГАРАЗД" || { echo "Є ПОМИЛКИ"; exit 1; }

@@ -73,13 +73,16 @@ go test ./internal/loan -race -count=1 -cover
 
 ## Частина 3 — SonarQube Cloud (бонус)
 
-Конфігурація: [sonar-project.properties](sonar-project.properties) і GitHub Action [.github/workflows/sonar.yml](.github/workflows/sonar.yml)
-(тести з покриттям → `coverage.out` → сканування). Кроки на стороні користувача:
+Репозиторій підключено до SonarQube Cloud (організація `Vadim-27`, план Free, проєкт `Vadim-27_Go-with-GenAI-lessons-13-grpc`)
+з автоматичним аналізом (Automatic Analysis, без токена і CI): <https://sonarcloud.io/project/overview?id=Vadim-27_Go-with-GenAI-lessons-13-grpc>.
 
-1. Увійти на <https://sonarcloud.io> через GitHub → **+ → Analyze new project** → імпортувати цей репозиторій.
-2. Метод аналізу — **GitHub Actions**; скопіювати токен у GitHub: *Settings → Secrets and variables → Actions → `SONAR_TOKEN`*.
-3. Звірити `sonar.organization` і `sonar.projectKey` у `sonar-project.properties` зі значеннями на сторінці проєкту.
-4. Запушити в `main` → дочекатися зеленого запуску Action → зробити скриншот Overview (Quality Gate, Bugs, Vulnerabilities, Coverage).
+Що показав аналіз (коміт `ad49041`, ~10k рядків Go/Shell/Terraform/YAML):
+
+* Знахідки майже всі в інфраструктурних файлах попередніх тем (`docker-compose.yml`, `serverless/terraform*`, `k8s/*.yaml`, bash-скрипти, `Dockerfile`), а не в gRPC-коді.
+* У новому коді було 2 зауваження до моїх файлів: непіннований GitHub Action у `sonar.yml` (Security High) і `[` замість `[[` у `scripts/grpc-smoke.sh`.
+  Виправлено: `[[ ... ]]`; workflow видалено (аналіз іде без CI).
+* Дублювання ~4% спричинене згенерованим кодом `gen/`; його виключають у Sonar: *Administration → General Settings → Analysis Scope → Duplication Exclusions* → `gen/**`.
+* Покриття тестами Automatic Analysis не рахує; власні покриття: `internal/loan` — 90,5% (`go test -cover`).
 
 ## Що здавати
 
@@ -98,5 +101,5 @@ go test ./internal/loan -race -count=1 -cover
 | 6 | **Власний сервіс: streaming** | `loan-client -max 3 watch reader-1`, поруч два `create` в іншому терміналі |
 | 7 | Помилка валідації | `loan-client create "" reader-1` → `InvalidArgument` |
 | 8 | Тести власного сервісу | `go test ./internal/loan -race -count=1 -cover` |
-| 9 | SonarQube Cloud | сторінка Overview проєкту з Quality Gate |
+| 9 | SonarQube Cloud | Summary (Quality Gate, Security/Reliability/Maintainability) і сторінка Issues |
 | 10 | GitHub | сторінка репозиторію з файлами |
