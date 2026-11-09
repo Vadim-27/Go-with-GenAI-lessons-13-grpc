@@ -1,0 +1,14 @@
+$ loan-client create book-1 reader-1 7      # unary
+створено: id=loan-1 book=book-1 reader=reader-1 status=ACTIVE due=2026-11-16
+
+$ loan-client create "" reader-1       # помилка валідації
+RPC помилка: code=InvalidArgument message="book_id and reader_id are required"
+
+$ loan-client create book-2 reader-1 99  # days > 60
+RPC помилка: code=InvalidArgument message="days must be in 1..60, got 99"
+
+$ loan-client -max 3 watch reader-1     # server streaming (у фоні)
+подія: id=loan-1 book=book-1 reader=reader-1 status=ACTIVE due=2026-11-16
+подія: id=loan-2 book=book-3 reader=reader-1 status=ACTIVE due=2026-11-23
+подія: id=loan-3 book=book-4 reader=reader-1 status=ACTIVE due=2026-11-23
+потік завершено сервером (io.EOF) — все гаразд

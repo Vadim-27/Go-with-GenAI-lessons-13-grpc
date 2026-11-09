@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package loan.v1;
+
+option go_package = "libratrack/gen/loan";
+
+// LoanService — власний мінімальний gRPC-сервіс домашнього завдання:
+// одна unary-операція (видати книгу) і один серверний стрімінг (стежити за видачами).
+service LoanService {
+  // Unary: створити позику й повернути її.
+  rpc CreateLoan(CreateLoanRequest) returns (Loan);
+
+  // Server streaming: потік подій про нові позики читача.
+  // Одразу віддає вже наявні позики, далі — нові в реальному часі.
+  // Потік завершується, коли досягнуто max_events, або клієнт скасував виклик.
+  rpc WatchLoans(WatchLoansRequest) returns (stream Loan);
+}
+
+message Loan {
+  string id = 1;
+  string book_id = 2;
+  string reader_id = 3;
+  Status status = 4;
+  int64 issued_at_unix = 5; // момент видачі, секунди Unix (UTC)
+  int64 due_at_unix = 6;    // крайній термін повернення
+
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    ACTIVE = 1;
+  }
+}
+
+message CreateLoanRequest {
+  string book_id = 1;
+  string reader_id = 2;
+  int32 days = 3; // 1..60; 0 = значення за замовчуванням (14)
+}
+
+message WatchLoansRequest {
+  string reader_id = 1;
+  int32 max_events = 2; // 0 = без обмеження
+}

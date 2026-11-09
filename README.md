@@ -64,7 +64,7 @@ docker compose --profile app up -d --build           # app на :8080 + postgres
 
 ## DevOps: Vagrant, Floci, k3s
 
-Чекліст і порядок кроків — у [HomeWork_DevOps.md](HomeWork_DevOps.md).
+Чекліст і порядок кроків — в історії git (файл `HomeWork_DevOps.md` замінено завданням теми 13).
 
 | Файл | Що робить |
 |---|---|
@@ -74,6 +74,38 @@ docker compose --profile app up -d --build           # app на :8080 + postgres
 | [k8s/](k8s/) | Postgres + LibraTrack у k3s; `bash /app/k8s/deploy.sh` |
 
 Порти на Windows: `18080` — Compose, `30080` — k3s NodePort, `8088` — Traefik Ingress.
+
+## gRPC (тема 13): LoanService і InventoryService
+
+**Власний сервіс (завдання +30):** `proto/loan.proto` — `CreateLoan` (unary) і `WatchLoans` (server streaming); `cmd/loan-server` (:50061), `cmd/loan-client`, `internal/loan`.
+
+```bash
+go run ./cmd/loan-server
+go run ./cmd/loan-client create book-1 reader-1 7
+go run ./cmd/loan-client -max 3 watch reader-1
+go test ./internal/loan -race -count=1 -cover
+```
+
+**Демо з презентації — InventoryService:**
+
+Окремий gRPC-сервіс обліку примірників (`Copy`) поруч із REST API: контракт `proto/inventory.proto`, згенерований код
+у `gen/inventory/`, сервер `cmd/inventory-server` (:50051), клієнт `cmd/inventory-client`, REST-міст `cmd/gateway` (:8080),
+mTLS (`cmd/gencerts`), JWT (`cmd/mint-token`), бенчмарк `bench/`. Дані зберігаються в пам'яті (БД не потрібна).
+Деталі та результати — у [HomeWork 13.md](HomeWork%2013.md).
+
+```bash
+go run ./cmd/inventory-server                  # термінал 1
+go run ./cmd/inventory-client get copy-1       # термінал 2 (також: register, set-status, watch, bulk, sync)
+go run ./cmd/gateway                           # термінал 3 → curl localhost:8080/v1/copies/copy-1
+go run ./cmd/inventory-server -auth            # + JWT: токен через go run ./cmd/mint-token -sub anna -role librarian
+go run ./cmd/gencerts && go run ./cmd/inventory-server -tls -auth   # mTLS
+go test ./internal/server ./internal/grpcauth ./bench -race -count=1
+go test ./bench -run "^$" -bench=. -benchmem   # gRPC vs REST
+bash scripts/grpc-smoke.sh                     # наскрізна перевірка
+make proto                                     # перегенерація (потрібні protoc і плагіни; make tools)
+```
+
+Набір промптів для роботи з ШІ над gRPC — [docs/grpc-prompt-kit/](docs/grpc-prompt-kit/README.md).
 
 ## Тести
 
@@ -90,9 +122,8 @@ CSRF, автоекранування, cookie, вбудована статика)
 | Документ | Зміст |
 |---|---|
 | [design_v10.txt](design_v10.txt) | HttpOnly-cookie замість localStorage, аудит шаблонів, перевірка ізоляції бінарника |
-| [prompts.txt](prompts.txt) | промпти завдань 2.1 і 2.2 (тема 10) та архів теми 9 |
-| [HomeWork 10.md](HomeWork%2010.md) | текст завдання теми 10 |
-| [HomeWork_DevOps.md](HomeWork_DevOps.md) | чекліст завдання DevOps: Vagrant, Docker, Floci, k3s |
+| [HomeWork 13.md](HomeWork%2013.md) | завдання теми 13 (gRPC): що зроблено, результати тестів і бенчмарку |
+| [prompts.txt](prompts.txt) | журнал промптів теми 13 (відповідність промптів з [docs/grpc-prompt-kit](docs/grpc-prompt-kit/README.md)) |
 | [security_design.txt](security_design.txt), [security_audit.md](security_audit.md) | безпека API (тема 9) |
 
 Ролі API: `reader`, `librarian`, `admin`; JSON API приймає лише `Authorization: Bearer`.

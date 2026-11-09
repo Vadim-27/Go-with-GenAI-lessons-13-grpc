@@ -1,0 +1,6 @@
+time=2026-11-09T11:09:24.741+01:00 level=INFO msg="loan server started" addr=[::]:50061
+time=2026-11-09T11:09:25.500+01:00 level=INFO msg=rpc method=/loan.v1.LoanService/CreateLoan dur=0s err=<nil>
+time=2026-11-09T11:09:25.550+01:00 level=INFO msg=rpc method=/loan.v1.LoanService/CreateLoan dur=0s err="rpc error: code = InvalidArgument desc = book_id and reader_id are required"
+time=2026-11-09T11:09:25.593+01:00 level=INFO msg=rpc method=/loan.v1.LoanService/CreateLoan dur=0s err="rpc error: code = InvalidArgument desc = days must be in 1..60, got 99"
+time=2026-11-09T11:09:26.689+01:00 level=INFO msg=rpc method=/loan.v1.LoanService/CreateLoan dur=0s err=<nil>
+time=2026-11-09T11:09:26.726+01:00 level=INFO msg=rpc method=/loan.v1.LoanService/CreateLoan dur=0s err=<nil>

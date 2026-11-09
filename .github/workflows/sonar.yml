@@ -1,0 +1,23 @@
+name: SonarQube Cloud
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  sonar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # повна історія потрібна для аналізу нового коду
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Тести gRPC-частини з покриттям (без БД)
+        run: go test -race -coverprofile=coverage.out ./internal/loan/... ./internal/server/... ./internal/grpcauth/...
+      - name: SonarQube Cloud scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

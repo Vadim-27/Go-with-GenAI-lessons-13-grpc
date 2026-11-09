@@ -26,3 +26,7 @@ cover.out
 
 # образ для передачі у VM (docker save)
 *.tar
+
+# gRPC (урок 13): згенеровані демо-сертифікати mTLS
+certs/
+coverage.out
