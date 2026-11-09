@@ -1,0 +1,28 @@
+scripts/test.sh
+API: http://floci:4566/restapis/1e26a3c7f7/dev/_user_request_/webhook
+
+── 1. Пряме викликання Lambda (aws lambda invoke) ──
+  ✅ valid.json → 200 (=200)
+  ✅ invalid.json → 400, не 502 (=400)
+  ✅ missing_field.json → 400 (=400)
+  ✅ unsupported_event.json → 400 (=400)
+
+── 2. Через API Gateway (curl) ──
+  ✅ валідний payload → 200 (=200)
+  ✅ зламаний JSON → 400 (не 502) (=400)
+  ✅ бракує поля → 400 (=400)
+  Відповідь на валідний запит:
+    {"donation":{"title":"The Go Programming Language","author":"Alan Donovan, Brian Kernighan","isbn":"9780134190440","condition":"good","donor_email":"reader@example.com"},"status":"processed"}
+
+── 2b. fine (домашнє завдання) ──
+  ✅ fine: пряме викликання fine_valid.json → 200 (=200)
+  ✅ fine: fine_invalid.json → 400 (=400)
+  ✅ fine: API, валідний payload → 200 (=200)
+  ✅ fine: API, зламаний JSON → 400 (не 502) (=400)
+  ✅ fine: API, бракує полів → 400 (=400)
+
+── 3. S3-тригер: мініатюра обкладинки ──
+  ✅ мініатюра створена автоматично (S3-тригер спрацював)
+  ✅ мініатюру можна завантажити (2283 байт)
+
+── Підсумок: ✅ 14  ❌ 0 ──

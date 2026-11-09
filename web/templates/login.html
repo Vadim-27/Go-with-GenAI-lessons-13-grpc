@@ -1,0 +1,19 @@
+{{define "content"}}
+{{with .Content}}
+<section class="auth">
+  <form class="card form" method="post" action="/login">
+    <h1>Вхід</h1>
+    <p class="muted">Токен зберігається в HttpOnly-cookie — JavaScript його не бачить.</p>
+    {{if .Error}}<div class="alert" role="alert">{{.Error}}</div>{{end}}
+    <label>Email
+      <input type="email" name="email" value="{{.Email}}" required autocomplete="username" autofocus>
+    </label>
+    <label>Пароль
+      <input type="password" name="password" required autocomplete="current-password">
+    </label>
+    <button type="submit" class="btn">Увійти</button>
+    <p class="muted">Немає акаунта? <a href="/register">Зареєструватися</a></p>
+  </form>
+</section>
+{{end}}
+{{end}}

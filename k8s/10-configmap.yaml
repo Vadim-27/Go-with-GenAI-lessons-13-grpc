@@ -1,0 +1,14 @@
+# Несекретні налаштування. Секрети (паролі, JWT_SECRET) — у Secret libratrack-secrets,
+# який створює k8s/deploy.sh і який не зберігається в Git.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: libratrack-config
+  namespace: libratrack
+  labels:
+    app.kubernetes.io/part-of: libratrack
+data:
+  PORT: "8080"
+  POSTGRES_USER: libratrack
+  POSTGRES_DB: libratrack
+  BOOTSTRAP_ADMIN_EMAIL: admin@libratrack.local

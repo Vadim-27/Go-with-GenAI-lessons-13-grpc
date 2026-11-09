@@ -1,0 +1,19 @@
+{
+  "resource": "/webhook",
+  "path": "/webhook",
+  "httpMethod": "POST",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "queryStringParameters": null,
+  "pathParameters": null,
+  "stageVariables": null,
+  "requestContext": {
+    "requestId": "demo-unsupported-0001",
+    "stage": "dev",
+    "httpMethod": "POST",
+    "path": "/dev/webhook"
+  },
+  "body": "{\"event\": \"book.lost\", \"data\": {\"isbn\": \"9780134190440\"}}",
+  "isBase64Encoded": false
+}

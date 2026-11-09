@@ -1,0 +1,19 @@
+{
+    "resource":  "/fine",
+    "path":  "/fine",
+    "httpMethod":  "POST",
+    "headers":  {
+                    "Content-Type":  "application/json"
+                },
+    "queryStringParameters":  null,
+    "pathParameters":  null,
+    "stageVariables":  null,
+    "requestContext":  {
+                           "requestId":  "fine-invalid-0001",
+                           "stage":  "dev",
+                           "httpMethod":  "POST",
+                           "path":  "/dev/fine"
+                       },
+    "body":  "{\"loan_id\":\"L-1003\",\"category\":\"vip\",\"due_date\":\"01.10.2026\",\"returned_date\":\"tomorrow\"}",
+    "isBase64Encoded":  false
+}

@@ -1,0 +1,22 @@
+# Traefik Ingress (вбудований у k3s, слайд 44). Без host-правила — приймає будь-який Host,
+# тож з Windows застосунок відкривається на http://localhost:8088 (Vagrant: 80 → 8088).
+# Саме localhost: cookie сесії має прапорець Secure, а браузери приймають його по HTTP лише для localhost.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: libratrack
+  namespace: libratrack
+  labels:
+    app: libratrack
+    app.kubernetes.io/part-of: libratrack
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: libratrack
+                port:
+                  number: 8080

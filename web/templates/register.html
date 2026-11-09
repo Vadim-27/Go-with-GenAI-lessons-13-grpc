@@ -1,0 +1,22 @@
+{{define "content"}}
+{{with .Content}}
+<section class="auth">
+  <form class="card form" method="post" action="/register">
+    <h1>Реєстрація</h1>
+    <p class="muted">Новий акаунт отримує роль reader. Роль змінює лише адміністратор.</p>
+    {{if .Error}}<div class="alert" role="alert">{{.Error}}</div>{{end}}
+    <label>Email
+      <input type="email" name="email" value="{{.Email}}" required autocomplete="username">
+    </label>
+    <label>Ім'я
+      <input type="text" name="full_name" value="{{.FullName}}" maxlength="200" autocomplete="name">
+    </label>
+    <label>Пароль <span class="muted">(8–72 символи)</span>
+      <input type="password" name="password" required minlength="8" maxlength="72" autocomplete="new-password">
+    </label>
+    <button type="submit" class="btn">Створити акаунт</button>
+    <p class="muted">Уже є акаунт? <a href="/login">Увійти</a></p>
+  </form>
+</section>
+{{end}}
+{{end}}

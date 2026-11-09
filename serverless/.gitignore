@@ -1,0 +1,12 @@
+build/
+.floci-data/
+.api-id
+*.zip
+terraform/.terraform/
+terraform/*.tfstate*
+terraform/.terraform.lock.hcl
+.aws-sam/
+terraform-ai/.terraform/
+terraform-ai/*.tfstate*
+terraform-ai/.terraform.lock.hcl
+.plan-*.txt

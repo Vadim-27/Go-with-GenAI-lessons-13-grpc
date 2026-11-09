@@ -1,0 +1,28 @@
+{{define "book_row"}}
+<tr id="book-{{.ID}}">
+  <td class="title">{{.Title}}</td>
+  <td>{{.Authors}}</td>
+  <td><span class="tag">{{.Category}}</span></td>
+  <td class="num">{{with .Year}}{{.}}{{else}}—{{end}}</td>
+  <td class="mono">{{.ISBN}}</td>
+  <td>
+    {{if eq .Total 0}}
+      <span class="avail none">○ немає примірників</span>
+    {{else if gt .Available 0}}
+      <span class="avail yes">● доступно {{.Available}} з {{.Total}}</span>
+    {{else}}
+      <span class="avail no">● усі видані ({{.Total}})</span>
+    {{end}}
+  </td>
+  {{if .CanManage}}
+  <td class="actions">
+    <a class="btn ghost small" href="/web/books/{{.ID}}/edit">Редагувати</a>
+    <button type="button" class="btn danger small"
+            hx-delete="/web/books/{{.ID}}"
+            hx-target="closest tr"
+            hx-swap="outerHTML"
+            hx-confirm="Delete this book?">Видалити</button>
+  </td>
+  {{end}}
+</tr>
+{{end}}

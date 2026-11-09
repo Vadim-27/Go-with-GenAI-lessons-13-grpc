@@ -1,0 +1,7 @@
+# Накладка для бенчмарку: контейнер Lambda видаляється після КОЖНОГО виклику,
+# тож кожен виклик — холодний старт.
+#   docker compose -f compose.yaml -f compose.ephemeral.yaml up -d
+services:
+  floci:
+    environment:
+      FLOCI_SERVICES_LAMBDA_EPHEMERAL: "true"

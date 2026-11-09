@@ -1,0 +1,61 @@
+{{define "content"}}
+{{with .Content}}
+<section class="page-head">
+  <div>
+    <h1>{{if .IsEdit}}Редагування книги{{else}}Нова книга{{end}}</h1>
+    <p class="muted">Поля з * обов'язкові.</p>
+  </div>
+  <a class="btn ghost" href="/catalog">← До каталогу</a>
+</section>
+
+{{if .Error}}<div class="alert" role="alert">{{.Error}}</div>{{end}}
+
+<form class="card form" method="post" action="{{.Action}}">
+  <label>Назва *
+    <input type="text" name="title" value="{{.Title}}" required maxlength="300">
+  </label>
+
+  <div class="grid-2">
+    <label>ISBN *
+      <input type="text" name="isbn" value="{{.ISBN}}" required maxlength="20">
+    </label>
+    <label>Рік видання
+      <input type="number" name="published_year" value="{{.PublishedYear}}" min="1000" max="2100">
+    </label>
+  </div>
+
+  <div class="grid-2">
+    <label>Категорія *
+      <select name="category_id" required>
+        <option value="">— оберіть —</option>
+        {{$cat := .CategoryID}}
+        {{range .Categories}}
+          <option value="{{.ID}}"{{if eq .ID $cat}} selected{{end}}>{{.Name}}</option>
+        {{end}}
+      </select>
+    </label>
+    <label>Видавництво
+      <input type="text" name="publisher" value="{{.Publisher}}" maxlength="200">
+    </label>
+  </div>
+
+  <label>Автори * <span class="muted">(Ctrl/⌘ + клік — кілька)</span>
+    <select name="author_ids" multiple size="6" required>
+      {{$selected := .AuthorIDs}}
+      {{range .Authors}}
+        <option value="{{.ID}}"{{if hasID $selected .ID}} selected{{end}}>{{.FullName}}</option>
+      {{end}}
+    </select>
+  </label>
+
+  <label>Опис
+    <textarea name="description" rows="4" maxlength="2000">{{.Description}}</textarea>
+  </label>
+
+  <div class="form-actions">
+    <button type="submit" class="btn">{{if .IsEdit}}Зберегти зміни{{else}}Додати книгу{{end}}</button>
+    <a class="btn ghost" href="/catalog">Скасувати</a>
+  </div>
+</form>
+{{end}}
+{{end}}

@@ -1,0 +1,9 @@
+{{define "content"}}
+{{with .Content}}
+<section class="card error-page">
+  <p class="error-code">{{.Status}}</p>
+  <h1>{{.Message}}</h1>
+  <a class="btn" href="/catalog">До каталогу</a>
+</section>
+{{end}}
+{{end}}

@@ -1,0 +1,28 @@
+# binaries and test artifacts
+/api
+*.exe
+*.out
+test.json
+list.txt
+result.json
+.idea/
+.vscode/
+
+# Vagrant, Terraform, Lambda build
+.vagrant/
+.terraform/
+*.tfstate
+*.tfstate.*
+bootstrap
+function.zip
+
+# local secrets
+.env
+bin/
+app.log
+test.log
+cover.out
+/libratrack
+
+# образ для передачі у VM (docker save)
+*.tar

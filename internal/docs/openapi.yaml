@@ -1,0 +1,964 @@
+openapi: 3.0.3
+info:
+  title: LibraTrack API
+  description: |
+    REST API of the LibraTrack library system (PostgreSQL + GORM).
+    Books belong to one category and have one or more authors (Many-to-Many).
+    Every book can have several physical copies.
+  version: 2.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local server
+
+tags:
+  - name: system
+  - name: categories
+  - name: authors
+  - name: books
+  - name: copies
+  - name: auth
+  - name: users
+  - name: loans
+
+paths:
+  /health:
+    get:
+      tags: [system]
+      summary: Health check
+      operationId: health
+      responses:
+        "200":
+          description: The service is running
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /api/v1/categories:
+    get:
+      tags: [categories]
+      summary: List categories
+      operationId: listCategories
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Categories ordered by id
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Category"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+    post:
+      tags: [categories]
+      summary: Create a category
+      description: The name must be 2 to 40 characters long and unique.
+      operationId: createCategory
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryInput"
+      responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  /api/v1/categories/{id}:
+    get:
+      tags: [categories]
+      summary: Get a category
+      operationId: getCategory
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: The category
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/authors:
+    get:
+      tags: [authors]
+      summary: List authors
+      operationId: listAuthors
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Authors ordered by id
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Author"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+    post:
+      tags: [authors]
+      summary: Create an author
+      operationId: createAuthor
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthorInput"
+      responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Author"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  /api/v1/authors/{id}:
+    get:
+      tags: [authors]
+      summary: Get an author
+      operationId: getAuthor
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: The author
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Author"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/books:
+    get:
+      tags: [books]
+      summary: List books
+      description: |
+        Ordered by id. Every book contains its category and authors, loaded with
+        a constant number of SQL queries (no N+1).
+        A page beyond the data gives an empty array.
+      operationId: listBooks
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+        - name: category_id
+          in: query
+          description: Keep only books of this category. An empty value means no filter.
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: A page of books
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Book"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+    post:
+      tags: [books]
+      summary: Create a book
+      description: |
+        The book and its author links are saved in one transaction.
+        An unknown author or category gives 422 invalid_reference and nothing is stored.
+      operationId: createBook
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookInput"
+      responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  /api/v1/books/{id}:
+    get:
+      tags: [books]
+      summary: Get a book
+      operationId: getBook
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: The book with its category and authors
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [books]
+      summary: Replace a book
+      description: Replaces the book fields and the list of its authors.
+      operationId: updateBook
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookInput"
+      responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "200":
+          description: The saved book
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+    delete:
+      tags: [books]
+      summary: Delete a book
+      description: The database also deletes the copies and the author links of the book.
+      operationId: deleteBook
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "204":
+          description: Deleted
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/books/{id}/copies:
+    get:
+      tags: [copies]
+      summary: List copies of a book
+      operationId: listCopies
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Copies ordered by id
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Copy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [copies]
+      summary: Add a copy of a book
+      description: The status defaults to available.
+      operationId: createCopy
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CopyInput"
+      responses:
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Copy"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  /api/v1/books/{id}/availability:
+    get:
+      tags: [copies]
+      summary: Availability of a book
+      operationId: getAvailability
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: Number of all and available copies
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Availability"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/auth/register:
+    post:
+      tags: [auth]
+      summary: Register a new reader
+      description: |
+        Creates an account with the role `reader`. The role cannot be chosen by the client:
+        unknown fields (for example `role`) are rejected with 422.
+        A duplicate email gives 422 "email already registered".
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Created (the password hash is never returned)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      summary: Log in and get a JWT
+      description: |
+        An unknown email and a wrong password give the same 401 "invalid credentials"
+        (protection against user enumeration). The token lives 24 hours.
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Signed JWT (HS256) and the user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  /api/v1/me:
+    get:
+      tags: [users]
+      summary: Current user profile
+      operationId: getMe
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    put:
+      tags: [users]
+      summary: Update own profile (full_name only)
+      operationId: updateMe
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProfileRequest"
+      responses:
+        "200":
+          description: The updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  /api/v1/me/loans:
+    get:
+      tags: [loans]
+      summary: My loans
+      description: Only the loans of the user from the token (the id is never taken from the query).
+      operationId: listMyLoans
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Loans of the current user, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Loan"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/loans:
+    post:
+      tags: [loans]
+      summary: Issue a copy to a reader (librarian, admin)
+      description: |
+        The loan is created and the copy becomes `borrowed` in one transaction.
+        A copy that is not `available` gives 409 conflict.
+      operationId: issueLoan
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoanInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Loan"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+  /api/v1/loans/{id}/return:
+    post:
+      tags: [loans]
+      summary: Return a loan (librarian, admin)
+      operationId: returnLoan
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      responses:
+        "200":
+          description: The closed loan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Loan"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v1/users:
+    get:
+      tags: [users]
+      summary: List users (admin)
+      operationId: listUsers
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Users ordered by id (no password hashes)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/users/{id}/role:
+    put:
+      tags: [users]
+      summary: Change the role of a user (admin)
+      description: An admin cannot change their own role (422).
+      operationId: updateUserRole
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRoleRequest"
+      responses:
+        "200":
+          description: The updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "Header Authorization: Bearer <token>. Get the token from POST /auth/login."
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      description: Positive integer id.
+      schema:
+        type: integer
+        minimum: 1
+    Page:
+      name: page
+      in: query
+      description: Page number (integer >= 1).
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    Limit:
+      name: limit
+      in: query
+      description: Page size (integer >= 1). A value above 100 is replaced by 100.
+      schema:
+        type: integer
+        minimum: 1
+        default: 10
+
+  schemas:
+    Category:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: Programming
+    CategoryInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 40
+          example: Programming
+    Author:
+      type: object
+      required: [id, full_name, bio]
+      properties:
+        id:
+          type: integer
+          example: 1
+        full_name:
+          type: string
+          example: Alan Donovan
+        bio:
+          type: string
+          nullable: true
+    AuthorInput:
+      type: object
+      required: [full_name]
+      properties:
+        full_name:
+          type: string
+          example: Alan Donovan
+        bio:
+          type: string
+          nullable: true
+    Book:
+      type: object
+      required: [id, title, isbn, category_id, category, authors, created_at]
+      properties:
+        id:
+          type: integer
+          example: 1
+        title:
+          type: string
+          example: The Go Programming Language
+        isbn:
+          type: string
+          example: "9780134190440"
+        category_id:
+          type: integer
+          example: 1
+        category:
+          $ref: "#/components/schemas/Category"
+        authors:
+          type: array
+          items:
+            $ref: "#/components/schemas/Author"
+        publisher:
+          type: string
+          nullable: true
+        published_year:
+          type: integer
+          nullable: true
+          example: 2015
+        description:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    BookInput:
+      type: object
+      required: [title, isbn, category_id, author_ids]
+      properties:
+        title:
+          type: string
+          example: The Go Programming Language
+        isbn:
+          type: string
+          example: "9780134190440"
+        category_id:
+          type: integer
+          example: 1
+        author_ids:
+          type: array
+          minItems: 1
+          items:
+            type: integer
+          example: [1, 2]
+        publisher:
+          type: string
+          nullable: true
+        published_year:
+          type: integer
+          minimum: 1000
+          maximum: 2100
+          nullable: true
+        description:
+          type: string
+          nullable: true
+    Copy:
+      type: object
+      required: [id, book_id, inventory_no, status]
+      properties:
+        id:
+          type: integer
+        book_id:
+          type: integer
+        inventory_no:
+          type: string
+          example: INV-0001
+        status:
+          $ref: "#/components/schemas/CopyStatus"
+    CopyInput:
+      type: object
+      required: [inventory_no]
+      properties:
+        inventory_no:
+          type: string
+          example: INV-0001
+        status:
+          $ref: "#/components/schemas/CopyStatus"
+    CopyStatus:
+      type: string
+      enum: [available, borrowed, lost, under_repair]
+      default: available
+    Availability:
+      type: object
+      required: [book_id, total_copies, available_copies]
+      properties:
+        book_id:
+          type: integer
+        total_copies:
+          type: integer
+        available_copies:
+          type: integer
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - invalid_id
+                - invalid_pagination
+                - validation_error
+                - not_found
+                - conflict
+                - invalid_reference
+                - unauthenticated
+                - forbidden
+                - internal_server_error
+            message:
+              type: string
+
+    Role:
+      type: string
+      enum: [reader, librarian, admin]
+    User:
+      type: object
+      required: [id, email, full_name, role, created_at]
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+          format: email
+        full_name:
+          type: string
+          nullable: true
+        role:
+          $ref: "#/components/schemas/Role"
+        created_at:
+          type: string
+          format: date-time
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: reader@libratrack.com
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 72
+        full_name:
+          type: string
+          nullable: true
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+          format: password
+    LoginResponse:
+      type: object
+      required: [token, user]
+      properties:
+        token:
+          type: string
+          description: JWT (HS256) with claims user_id, role, exp (24 hours).
+        user:
+          $ref: "#/components/schemas/User"
+    UpdateProfileRequest:
+      type: object
+      additionalProperties: false
+      required: [full_name]
+      properties:
+        full_name:
+          type: string
+          maxLength: 100
+          description: An empty string clears the name.
+    UpdateRoleRequest:
+      type: object
+      additionalProperties: false
+      required: [role]
+      properties:
+        role:
+          $ref: "#/components/schemas/Role"
+    Loan:
+      type: object
+      required: [id, user_id, copy_id, issued_by, issued_at, due_at, returned_at]
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        copy_id:
+          type: integer
+        issued_by:
+          type: integer
+        issued_at:
+          type: string
+          format: date-time
+        due_at:
+          type: string
+          format: date-time
+        returned_at:
+          type: string
+          format: date-time
+          nullable: true
+    LoanInput:
+      type: object
+      additionalProperties: false
+      required: [user_id, copy_id]
+      properties:
+        user_id:
+          type: integer
+        copy_id:
+          type: integer
+        days:
+          type: integer
+          minimum: 1
+          maximum: 60
+          default: 14
+
+  responses:
+    BadRequest:
+      description: Invalid id or pagination parameter (invalid_id, invalid_pagination)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: The entity does not exist (not_found)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: A unique value already exists, for example the ISBN (conflict)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unprocessable:
+      description: Invalid body (validation_error) or unknown author or category (invalid_reference)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Missing, malformed or expired token, or wrong credentials (unauthenticated)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: The role of the user is not allowed to call this endpoint (forbidden)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"

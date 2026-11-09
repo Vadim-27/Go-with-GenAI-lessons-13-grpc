@@ -1,0 +1,114 @@
+===============================================================
+LibraTrack — Дизайн безпеки (Завдання 1.1)
+===============================================================
+
+1. РОЛІ
+---------------------------------------------------------------
+У системі три ролі (збігаються з CHECK-обмеженням ck_users_role
+у міграції 000001: 'admin', 'librarian', 'reader').
+
+  reader     — звичайний читач. Може переглядати каталог і бачити
+               лише власні позики.
+  librarian  — працівник бібліотеки. Керує каталогом (книги, автори,
+               категорії, примірники) та видає/приймає книги.
+  admin      — адміністратор. Усі права librarian + керування
+               користувачами та їхніми ролями.
+
+Принципи:
+  * Нова реєстрація ЗАВЖДИ отримує роль 'reader'. Клієнт не може
+    обрати роль сам (захист від Mass Assignment / ескалації прав).
+  * Роль змінює лише admin через PUT /users/:id/role.
+  * Роль зашита в JWT (claim "role"), тому після зміни ролі старий
+    токен діє до закінчення (exp, 24 год). Це відомий компроміс,
+    фіксується в security_audit.md.
+
+
+2. МАТРИЦЯ ДОСТУПУ
+---------------------------------------------------------------
+Позначки: ✔ — дозволено, ✘ — заборонено (403), 401 — потрібен токен.
+
+Група маршрутів `public` (без автентифікації):
+  Метод  Шлях                    Анонім  reader  librarian  admin
+  POST   /api/v1/auth/register     ✔       ✔        ✔        ✔
+  POST   /api/v1/auth/login        ✔       ✔        ✔        ✔
+  GET    /api/v1/books             ✔       ✔        ✔        ✔
+  GET    /api/v1/books/:id         ✔       ✔        ✔        ✔
+  GET    /api/v1/authors, /categories (і їхні :id) — так само публічні
+
+Група `protected` (будь-який автентифікований користувач):
+  GET    /api/v1/me/loans         401      ✔        ✔        ✔
+  GET    /api/v1/me               401      ✔        ✔        ✔
+  PUT    /api/v1/me               401      ✔        ✔        ✔
+         (оновлення профілю: лише full_name)
+
+Група `staff` (librarian, admin):
+  POST   /api/v1/books            401      ✘        ✔        ✔
+  PUT    /api/v1/books/:id        401      ✘        ✔        ✔
+  DELETE /api/v1/books/:id        401      ✘        ✔        ✔
+  POST/PUT/DELETE на authors, categories, copies — так само
+  POST   /api/v1/loans            401      ✘        ✔        ✔
+  POST   /api/v1/loans/:id/return 401      ✘        ✔        ✔
+
+Група `admin` (лише admin):
+  GET    /api/v1/users            401      ✘        ✘        ✔
+  PUT    /api/v1/users/:id/role   401      ✘        ✘        ✔
+
+Правила відповідей:
+  * Немає/невалідний/прострочений токен  -> 401 (code "unauthenticated")
+  * Токен валідний, але роль не підходить -> 403 (code "forbidden")
+  * Порядок middleware: AuthMiddleware (401) -> RequireRole (403).
+    RequireRole не може працювати без AuthMiddleware, бо читає
+    роль із контексту Gin.
+  * Обидва middleware при відмові викликають c.AbortWithStatusJSON,
+    щоб хендлер не виконувався.
+
+
+3. ДИЗАЙН DTO (захист від Mass Assignment)
+---------------------------------------------------------------
+Проблема: якщо зв'язувати JSON напряму з моделлю User, клієнт може
+надіслати {"role":"admin","id":1,"password_hash":"..."} і підвищити
+собі права. Тому для вводу використовуються окремі структури, у
+яких є ТІЛЬКИ поля, які користувач вправі змінювати.
+
+RegisterRequest (POST /auth/register):
+  email      string  — обов'язкове, формат email, нормалізується
+                       (trim + lower-case)
+  password   string  — обов'язкове, мінімум 8 символів, максимум 72
+                       (bcrypt ігнорує байти після 72-го)
+  full_name  string  — необов'язкове
+  НЕМАЄ полів: id, role, password_hash, created_at.
+
+LoginRequest (POST /auth/login):
+  email, password.
+
+UpdateProfileRequest (PUT /me):
+  full_name  string  — єдине редаговане поле.
+  НЕМАЄ полів: email, role, password_hash, id.
+
+UpdateRoleRequest (PUT /users/:id/role, лише admin):
+  role       string  — одне зі значень: reader | librarian | admin.
+
+Відповіді (виходи):
+  * Модель User має PasswordHash з тегом `json:"-"`, тому хеш
+    ніколи не потрапляє в JSON.
+  * Відповідь login: {"token": "...", "user": {id, email, role, ...}}.
+  * Додатково декодер тіла запиту забороняє невідомі поля
+    (DisallowUnknownFields), тож зайві ключі на кшталт "role"
+    у RegisterRequest призводять до помилки валідації, а не
+    тихо ігноруються.
+
+
+4. ПРАВИЛА ДЛЯ ПАРОЛІВ І ТОКЕНІВ
+---------------------------------------------------------------
+  * Хешування: bcrypt.GenerateFromPassword, cost = bcrypt.DefaultCost.
+  * Перевірка: bcrypt.CompareHashAndPassword.
+  * Логін: і невідомий email, і хибний пароль -> однакова відповідь
+    401 "invalid credentials" (захист від User Enumeration).
+    Для невідомого email також виконується фіктивне порівняння
+    bcrypt, щоб час відповіді не видавав існування акаунта.
+  * JWT: алгоритм HS256, claims user_id, role, exp (24 год).
+    Секрет — лише з os.Getenv("JWT_SECRET"); якщо порожній або
+    коротший за 32 символи — застосунок не стартує.
+  * При розборі токена жорстко перевіряється метод підпису
+    (лише HS256), щоб уникнути атаки підміни алгоритму ("none").
+  * Логи не містять паролів, хешів і токенів.

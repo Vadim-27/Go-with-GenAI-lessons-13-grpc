@@ -1,0 +1,25 @@
+# Floci — локальний емулятор AWS API на порту 4566 (слайди 29–31).
+# Запуск у VM:  docker compose -f compose.floci.yaml up -d
+# Перевірка:    curl http://localhost:4566/_localstack/health
+# Зупинка:      docker compose -f compose.floci.yaml down
+services:
+  aws-emulator:
+    # Зафіксована версія замість latest — відтворювані демо (слайд 38).
+    image: hectorvent/floci:1.5.5
+    container_name: floci_aws
+    # Lambda-контейнери Floci стартують у стандартній мережі Docker (bridge, 172.17.x).
+    # В окремій мережі Compose (172.18.x) вони не досягають Runtime API Floci:
+    # "dial tcp 172.18.0.2:9203: i/o timeout". Тому Floci теж у bridge.
+    network_mode: bridge
+    ports:
+      # Лише localhost VM: емулятор з фейковими ключами не повинен бути доступний ззовні.
+      - "127.0.0.1:4566:4566"
+    volumes:
+      # Floci запускає Lambda-функції в окремих контейнерах через Docker хоста.
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    # Floci працює як uid 1001, а docker.sock доступний лише root і групі docker (660).
+    # Додаємо групу docker хоста (у VM це 998: `getent group docker`), інакше Lambda
+    # падає з "java.net.BindException: Permission denied". Безпечніше, ніж user: root.
+    group_add:
+      - "${DOCKER_GID:-998}"
+    restart: unless-stopped

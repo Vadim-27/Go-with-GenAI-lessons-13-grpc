@@ -1,0 +1,14 @@
+.git
+.env
+*.exe
+/libratrack
+bin/
+*.md
+*.txt
+.vagrant/
+Vagrantfile
+scripts/
+demos/
+k8s/
+docs/
+compose.floci.yaml

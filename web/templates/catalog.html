@@ -1,0 +1,39 @@
+{{define "content"}}
+<section class="page-head">
+  <div>
+    <h1>Каталог книг</h1>
+    <p class="muted">Пошук працює під час введення — сторінка не перезавантажується.</p>
+  </div>
+  {{if .CanManage}}<a class="btn" href="/web/books/new">+ Додати книгу</a>{{end}}
+</section>
+
+<form class="search" action="/catalog" method="get" role="search">
+  <input type="search" name="q" value="{{.Content.Query}}"
+         placeholder="Назва, автор або ISBN…" aria-label="Пошук книг" autocomplete="off"
+         hx-get="/web/books"
+         hx-trigger="keyup changed delay:300ms"
+         hx-target="#book-list"
+         hx-indicator="#search-indicator">
+  <span id="search-indicator" class="spinner" aria-hidden="true"></span>
+  <button type="submit" class="btn ghost">Знайти</button>
+</form>
+
+<div class="table-wrap">
+  <table class="books">
+    <thead>
+      <tr>
+        <th>Назва</th>
+        <th>Автори</th>
+        <th>Категорія</th>
+        <th class="num">Рік</th>
+        <th>ISBN</th>
+        <th>Наявність</th>
+        {{if .CanManage}}<th class="actions">Дії</th>{{end}}
+      </tr>
+    </thead>
+    <tbody id="book-list">
+      {{template "book_rows" .Content.List}}
+    </tbody>
+  </table>
+</div>
+{{end}}

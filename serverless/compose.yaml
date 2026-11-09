@@ -1,0 +1,20 @@
+# Floci — локальний емулятор AWS (https://floci.io/floci/). Порт 4566.
+# Lambda у Floci виконується у СПРАВЖНІХ Docker-контейнерах, тому потрібен
+# Docker-сокет. Акаунт AWS і токени не потрібні.
+services:
+  floci:
+    image: floci/floci:latest          # для відтворюваності закріпіть версію: floci/floci:x.y.z
+    container_name: floci
+    user: root                         # доступ до /var/run/docker.sock
+    ports:
+      - "4566:4566"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock   # запуск Lambda-контейнерів
+      - ./.floci-data:/app/data                     # стан переживає перезапуск
+    environment:
+      FLOCI_DEFAULT_REGION: us-east-1
+      FLOCI_STORAGE_MODE: hybrid                    # memory | persistent | hybrid | wal
+      # Типові ліміти Lambda у Floci — 128 МБ / 3 с; наші функції задають свої явно.
+      # Якщо запити з хоста повертають URL з "localhost", а з інших контейнерів
+      # потрібне ім'я сервісу — розкоментуйте:
+      # FLOCI_HOSTNAME: floci

@@ -1,0 +1,41 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: libratrack-postgres
+    environment:
+      POSTGRES_USER: libratrack
+      POSTGRES_PASSWORD: libratrack
+      POSTGRES_DB: libratrack
+    ports:
+      - "5434:5432"
+    restart: unless-stopped
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U libratrack -d libratrack"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Застосунок в образі FROM scratch (лише один бінарник).
+  # Запуск: docker compose --profile app up -d --build
+  app:
+    profiles: ["app"]
+    build: .
+    image: libratrack:hw10
+    restart: unless-stopped
+    # Healthcheck береться з Dockerfile (HEALTHCHECK → /libratrack -healthcheck).
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://libratrack:libratrack@postgres:5432/libratrack?sslmode=disable
+      # Без JWT_SECRET (32+ символи, з .env) застосунок не стартує.
+      JWT_SECRET: ${JWT_SECRET:-}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:

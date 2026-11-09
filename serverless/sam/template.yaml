@@ -1,0 +1,59 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: LibraTrack — webhook та thumbnail (Урок 11). Локально тестується через `sam local`.
+
+Globals:
+  Function:
+    Runtime: provided.al2023
+    Handler: bootstrap
+    Architectures: [x86_64]      # Makefile збирає amd64. Для arm64 змініть тут і в Makefile (GOARCH)
+    Timeout: 10
+    MemorySize: 256
+
+Resources:
+  WebhookFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile       # викликає `make build-WebhookFunction`
+    Properties:
+      CodeUri: ..                 # корінь репозиторію (там Makefile)
+      # Політики лише для логів: SAM додає AWSLambdaBasicExecutionRole сам.
+      Events:
+        Webhook:
+          Type: Api
+          Properties:
+            Path: /webhook
+            Method: post
+
+  FineFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: ..
+      MemorySize: 128
+      Events:
+        Fine:
+          Type: Api
+          Properties:
+            Path: /fine
+            Method: post
+
+  ThumbnailFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
+    Properties:
+      CodeUri: ..
+      Timeout: 30
+      MemorySize: 512
+      Environment:
+        Variables:
+          OUTPUT_BUCKET: libratrack-thumbnails
+      # S3-тригер у цьому шаблоні не оголошено навмисно: розгортання з тригером
+      # демонструється через Terraform (terraform/main.tf) на Floci.
+
+Outputs:
+  WebhookApi:
+    Description: URL API (у `sam local start-api` — http://127.0.0.1:3000/webhook)
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/webhook"

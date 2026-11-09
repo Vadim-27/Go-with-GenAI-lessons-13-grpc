@@ -1,0 +1,19 @@
+{
+  "resource": "/webhook",
+  "path": "/webhook",
+  "httpMethod": "POST",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "queryStringParameters": null,
+  "pathParameters": null,
+  "stageVariables": null,
+  "requestContext": {
+    "requestId": "demo-missing-0001",
+    "stage": "dev",
+    "httpMethod": "POST",
+    "path": "/dev/webhook"
+  },
+  "body": "{\"event\": \"book.donated\", \"data\": {\"title\": \"Dune\"}}",
+  "isBase64Encoded": false
+}

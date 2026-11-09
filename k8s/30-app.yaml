@@ -1,0 +1,82 @@
+# LibraTrack: Deployment (2 репліки, probes, limits, non-root) + Service NodePort 30080 (слайд 41).
+# Образ libratrack:hw10 імпортується в containerd k3s скриптом k8s/deploy.sh (без registry),
+# тому imagePullPolicy: Never — якщо образ не імпортовано, под покаже ErrImageNeverPull.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: libratrack
+  namespace: libratrack
+  labels:
+    app: libratrack
+    app.kubernetes.io/part-of: libratrack
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: libratrack
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  template:
+    metadata:
+      labels:
+        app: libratrack
+        app.kubernetes.io/part-of: libratrack
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+      containers:
+        - name: libratrack
+          image: libratrack:hw10
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef: {name: libratrack-config}
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: libratrack-secrets, key: POSTGRES_PASSWORD}}
+            # $(VAR) підставляє змінні, оголошені вище (пароль — лише [A-Za-z0-9], щоб не ламати URL).
+            - name: DATABASE_URL
+              value: postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)?sslmode=disable
+            - name: JWT_SECRET
+              valueFrom: {secretKeyRef: {name: libratrack-secrets, key: JWT_SECRET}}
+            - name: BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom: {secretKeyRef: {name: libratrack-secrets, key: BOOTSTRAP_ADMIN_PASSWORD}}
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /health, port: http}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 250m, memory: 128Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: libratrack
+  namespace: libratrack
+  labels:
+    app: libratrack
+    app.kubernetes.io/part-of: libratrack
+spec:
+  type: NodePort
+  selector:
+    app: libratrack
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      nodePort: 30080

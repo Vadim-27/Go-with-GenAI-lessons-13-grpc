@@ -1,0 +1,7 @@
+{{/* Тіло таблиці каталогу. Використовується і в повній сторінці, і як
+     HTMX-фрагмент для GET /web/books (тоді рендериться без layout). */}}
+{{define "book_rows"}}
+{{range .Rows}}{{template "book_row" .}}{{else}}
+<tr class="empty"><td colspan="{{if .CanManage}}7{{else}}6{{end}}">Нічого не знайдено</td></tr>
+{{end}}
+{{end}}

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {{/* CSP забороняє inline-стилі та eval: вимикаємо стилі індикатора HTMX і eval-фільтри. */}}
+  <meta name="htmx-config" content='{"includeIndicatorStyles":false,"allowEval":false,"allowScriptTags":false}'>
+  <title>{{block "title" .}}{{.Title}}{{end}} · LibraTrack</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+  <script src="/static/js/htmx.min.js" defer></script>
+  <script src="/static/js/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/catalog"><span class="brand-mark">LT</span> LibraTrack</a>
+      <nav class="nav">
+        <a href="/catalog">Каталог</a>
+        {{if .CanManage}}<a href="/web/books/new">+ Нова книга</a>{{end}}
+        <a href="/swagger">API</a>
+      </nav>
+      <div class="session">
+        {{if .LoggedIn}}
+          <span class="role role-{{.Role}}">{{.Role}}</span>
+          <form method="post" action="/logout" class="inline">
+            <button type="submit" class="btn ghost small">Вийти</button>
+          </form>
+        {{else}}
+          <a class="btn ghost small" href="/login">Увійти</a>
+          <a class="btn small" href="/register">Реєстрація</a>
+        {{end}}
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div id="flash" class="flash{{if .Flash}} show{{end}}" role="status" aria-live="polite">{{.Flash}}</div>
+    {{block "content" .}}{{end}}
+  </main>
+
+  <footer class="footer">
+    LibraTrack · Go + html/template + HTMX · один бінарник (go:embed)
+  </footer>
+</body>
+</html>

@@ -1,0 +1,334 @@
+===============================================================
+LibraTrack — журнал промптів (Тема 10: html/template, HTMX, go:embed)
+===============================================================
+
+Спільний контекст, який передається разом з УСІМА промптами теми 10:
+  * Go 1.26, Gin v1.10, GORM + PostgreSQL, модуль `libratrack`;
+  * шари: handler -> repository (інтерфейси) -> GORM; роутер у internal/app/app.go;
+  * model.Book {ID, Title, ISBN, CategoryID, Category, Authors []Author,
+    Publisher *string, PublishedYear *int, Description *string};
+  * model.Copy {BookID, Status: available|borrowed|lost|under_repair};
+  * ролі reader / librarian / admin; JWT (auth.GenerateToken / auth.ParseToken);
+  * коментарі в коді — українською.
+
+---------------------------------------------------------------
+ЗАВДАННЯ 2.1 — Layout, сторінка каталогу та partial рядка
+              (layout.html + catalog.html + book_row.html)
+---------------------------------------------------------------
+
+ПРОМПТ:
+
+  Ти — Go-розробник, що пише серверний HTML без JS-фреймворків. Згенеруй
+  шаблони для html/template (НЕ text/template) веб-інтерфейсу LibraTrack.
+
+  1) web/templates/layout.html — базовий макет:
+     - <!doctype html>, lang="uk", meta charset та viewport;
+     - <title>{{block "title" .}}{{.Title}}{{end}} · LibraTrack</title>;
+     - підключення ЛИШЕ локальних файлів: /static/css/app.css,
+       /static/js/htmx.min.js (defer), /static/js/app.js (defer). Жодних CDN:
+       застосунок має працювати як один бінарник без інтернету;
+     - <meta name="htmx-config" content='{"includeIndicatorStyles":false,
+       "allowEval":false,"allowScriptTags":false}'> — сумісність із CSP
+       script-src 'self'; style-src 'self' (без inline-стилів і eval);
+     - шапка: логотип, посилання "Каталог", "+ Нова книга" (лише якщо
+       .CanManage), "API"; праворуч — бейдж ролі та форма POST /logout, або
+       "Увійти" / "Реєстрація" для аноніма (.LoggedIn, .Role);
+     - <div id="flash" role="status" aria-live="polite">{{.Flash}}</div>;
+     - <main>{{block "content" .}}{{end}}</main> — точка розширення сторінок.
+     Дані сторінки: struct pageData {Title, LoggedIn, Role, CanManage, Flash, Content any}.
+
+  2) web/templates/catalog.html — перевизначає {{define "content"}}:
+     - заголовок "Каталог книг" і кнопка "+ Додати книгу" для staff;
+     - форма пошуку GET /catalog з <input type="search" name="q"
+       value="{{.Content.Query}}"> (працює і без JavaScript) — HTMX-атрибути
+       додамо в завданні 2.2;
+     - таблиця <table class="books"> з колонками: Назва, Автори, Категорія, Рік,
+       ISBN, Наявність, Дії (колонка "Дії" — лише якщо .CanManage);
+     - <tbody id="book-list">{{template "book_rows" .Content.List}}</tbody>.
+
+  3) web/templates/partials/book_rows.html — {{define "book_rows"}}:
+     range по .Rows з {{template "book_row" .}}; у гілці else — один рядок
+     <tr class="empty"> "Нічого не знайдено" з colspan 7 або 6 (залежно від
+     .CanManage). Цей partial рендеритиметься і всередині сторінки, і окремо як
+     HTMX-фрагмент.
+
+  4) web/templates/partials/book_row.html — {{define "book_row"}}:
+     <tr id="book-{{.ID}}"> з назвою, авторами (рядок через кому), категорією
+     (бейдж), роком ({{with .Year}}{{.}}{{else}}—{{end}}), ISBN моноширинним.
+     Індикатор наявності (дані bookRow {Total, Available int64}):
+       Total = 0        -> "○ немає примірників" (сірий);
+       Available > 0    -> "● доступно N з M"     (зелений, class="avail yes");
+       інакше           -> "● усі видані (M)"     (помаранчевий, class="avail no").
+     Якщо .CanManage — комірка з посиланням "Редагувати" на /web/books/{{.ID}}/edit.
+
+  5) Безпека шаблонів (обов'язково):
+     - не використовуй template.HTML, template.JS, template.URL ні для яких даних;
+     - жодних inline <script> та атрибутів style= з даними;
+     - всі значення виводяться через {{.}}, щоб працювало контекстне
+       автоекранування (HTML-текст, атрибути, URL).
+
+  6) Також напиши web/static/css/app.css (світла/темна тема через
+     prefers-color-scheme, адаптивна таблиця, стилі .avail, кнопок, форм,
+     індикатора .spinner для класу .htmx-request).
+
+Результат інтеграції:
+  web/templates/layout.html, catalog.html, partials/book_row.html,
+  partials/book_rows.html, а також book_form.html, login.html, register.html,
+  error.html (за тим самим шаблоном {{define "content"}}), web/static/css/app.css.
+
+Ручний огляд результату (на що перевірено згенерований код):
+  * htmx підключається з вбудованого /static/js/htmx.min.js, а не з CDN
+    (вимога одного бінарника + CSP script-src 'self');
+  * усі сторінки в ОДНОМУ наборі шаблонів перекривали б "content" одна одній —
+    тому рендерер будує окремий набір layout + partials + сторінка для кожної;
+  * індикатор наявності не повинен робити запит на кожен рядок (N+1) —
+    використано CopyRepository.AvailabilityByBooks (один GROUP BY);
+  * перевірено grep-ом, що text/template та template.HTML не використовуються.
+
+---------------------------------------------------------------
+ЗАВДАННЯ 2.2 — HTMX: live search та видалення рядка (internal/handler/web/)
+---------------------------------------------------------------
+
+Додатковий контекст:
+  * шаблони із завдання 2.1; Renderer.Page(c, status, page, data) та
+    Renderer.Fragment(c, status, name, data);
+  * BookRepository.List(ctx, BookFilter{Page, Limit, Search}),
+    BookRepository.Delete(ctx, id) -> ErrNotFound / ErrInvalidReference;
+  * JWT веб-інтерфейсу лежить у HttpOnly-cookie libratrack_token.
+
+ПРОМПТ:
+
+  Додай HTMX-інтерактивність до каталогу LibraTrack і відповідні Gin-хендлери в
+  пакеті internal/handler/web (package web). Без JS-фреймворків: лише атрибути
+  hx-* і серверні HTML-фрагменти.
+
+  1) Live Search — в catalog.html у <input name="q"> додай:
+       hx-get="/web/books"
+       hx-trigger="keyup changed delay:300ms"
+       hx-target="#book-list"
+       hx-indicator="#search-indicator"
+     Хендлер BookList (GET /web/books?q=):
+       - q: trim, максимум 100 символів;
+       - якщо заголовок HX-Request: true — відрендерити ЛИШЕ partial
+         "book_rows" (рядки <tr>), БЕЗ layout, <html>, <table>;
+       - без HX-Request — 303 redirect на /catalog?q=<url-encoded q>;
+       - заголовок Vary: HX-Request.
+     Репозиторій: BookFilter.Search шукає ILIKE по title, isbn та імені автора
+     (EXISTS по book_authors/authors), лише через плейсхолдери; символи % і _ у
+     запиті екрануй, щоб користувач не міг передати власний шаблон LIKE.
+
+  2) Delete Row (лише librarian/admin) — у book_row.html кнопка:
+       <button type="button"
+               hx-delete="/web/books/{{.ID}}"
+               hx-target="closest tr"
+               hx-swap="outerHTML"
+               hx-confirm="Delete this book?">Видалити</button>
+     (рендериться лише коли .CanManage).
+     Хендлер DeleteBook (DELETE /web/books/:id):
+       - некоректний id -> 400; ErrNotFound -> 404; ErrInvalidReference
+         (у примірників є історія позик, FK RESTRICT) -> 409;
+       - успіх -> HTTP 200 OK з ПОРОЖНІМ тілом (c.Status(200)): HTMX замінить
+         <tr> порожнечею, і рядок зникне. НЕ 204 — на 204 HTMX нічого не свопає.
+
+  3) Доступ (middleware в internal/middleware):
+       - WebAuth: читає cookie libratrack_token, при валідному JWT кладе
+         user_id і role у контекст (ті самі ключі, що й AuthMiddleware), інакше
+         пропускає як аноніма;
+       - RequireWebRole(librarian, admin): анонім -> 401 + HX-Redirect: /login
+         (для звичайного GET — 303 на /login); роль reader -> 403 Forbidden;
+         ланцюжок перериваємо (c.Abort), хендлер не виконується;
+       - SameOrigin: http.CrossOriginProtection — POST/DELETE з чужого origin -> 403
+         (cookie-автентифікація вимагає захисту від CSRF);
+       - cookie: HttpOnly, Secure, SameSite=Strict, Path=/, Max-Age = TTL токена.
+
+  4) web/static/js/app.js (vanilla JS, без фреймворків): слухай
+     htmx:responseError і показуй "Помилка <status>: <текст>" у #flash через
+     textContent (НЕ innerHTML); після успішного DELETE — "Книгу видалено".
+
+Результат інтеграції:
+  internal/handler/web/{handler,catalog,books,session,render}.go,
+  internal/middleware/{web_auth,web_security}.go,
+  internal/repository/book_repository.go (Search), copy_repository.go
+  (AvailabilityByBooks), web/static/js/app.js, атрибути в catalog.html / book_row.html.
+
+Ручний огляд результату:
+  * видалення повертає саме 200 з порожнім тілом, а не 204 No Content: на 204
+    HTMX не виконує swap і рядок лишився б на сторінці;
+  * RequireRole з теми 9 відповідає JSON-ом — для веб-шару зроблено окремий
+    RequireWebRole (текст + HX-Redirect), ключі контексту спільні;
+  * hx-confirm лишився англійською дослівно за умовою завдання;
+  * екранування % і _ у LIKE (без нього запит "%" повертав би весь каталог) —
+    покрито тестом "символ % не є шаблоном LIKE".
+
+---------------------------------------------------------------
+PART 3 — Інструкції AI-агенту (go:embed та тести)
+---------------------------------------------------------------
+
+Task 3.1 (агенту):
+  Застосуй //go:embed: у web/templates.go — `//go:embed templates` в embed.FS
+  (TemplatesFS), шаблони розбирай template.ParseFS замість ParseGlob з диска;
+  у web/static.go — `//go:embed static` і функція Static() з
+  fs.Sub(staticFS, "static"), щоб /static/css/app.css відповідав файлу
+  static/css/app.css. Роздавай статику через http.FileServerFS без переліку
+  каталогів. Вбудуй також SQL-міграції (migrations/migrations.go, драйвер
+  golang-migrate source/iofs), інакше бінарник не стартує без ./migrations.
+  Підключи все в cmd/api/main.go і передай у app.NewRouter(db, app.Web{...}).
+
+Task 3.2 (агенту):
+  Напиши table-driven інтеграційні тести internal/handler/web/catalog_test.go
+  з httptest та справжньою PostgreSQL (testutil.NewDB, окрема схема t_web,
+  справжній роутер із вбудованими шаблонами):
+    1) GET /catalog -> 200, HTML з розміткою layout (doctype, header, footer,
+       посилання на /static/...), таблицею книг і індикаторами наявності;
+    2) GET /web/books?q=Go з HX-Request: true -> лише фрагменти book_row
+       (<tr id="book-...">), без <html>/<table>/<header>, без книг, що не
+       відповідають запиту; без HX-Request -> 303;
+    3) hx-delete: анонім -> 401, підроблений токен -> 401, reader -> 403 і книга
+       лишається в БД; CSRF (Origin чужого сайту) -> 403; librarian/admin -> 200
+       з порожнім тілом і книга видалена.
+  Додатково: автоекранування (<script> у назві книги), атрибути cookie після
+  POST /login (HttpOnly, SameSite=Strict, токена немає в тілі), вбудована
+  статика (/static/... -> 200 з правильним Content-Type, /static/ -> 404).
+
+===============================================================
+АРХІВ: журнал промптів теми 9 (автентифікація, JWT, RBAC)
+===============================================================
+
+===============================================================
+LibraTrack — журнал промптів (Тема 9)
+===============================================================
+
+---------------------------------------------------------------
+ЗАВДАННЯ 2.1 — Модуль автентифікації (bcrypt + видача JWT)
+---------------------------------------------------------------
+
+Контекст, який передається разом із промптом:
+  * Go 1.26, Gin v1.10, GORM + PostgreSQL, міграції golang-migrate;
+  * шари: handler -> repository (інтерфейс) -> GORM; модуль `libratrack`;
+  * наявна модель model.User (id, email, password_hash, full_name, role,
+    created_at); таблиця users з міграції 000001 УЖЕ має password_hash і role;
+  * формат помилок: {"error": {"code": "...", "message": "..."}}.
+
+ПРОМПТ:
+
+  Ти — досвідчений Go-розробник, що пише безпечний код. Реалізуй автентифікацію
+  для REST API LibraTrack (Gin + GORM + PostgreSQL). Стиль: коментарі
+  українською, ідіоматичний Go, без зайвих абстракцій.
+
+  1) Міграції БД
+     Створи migrations/000003_add_auth_fields.up.sql та .down.sql.
+     Колонки users.password_hash та users.role вже існують у 000001, тому НЕ
+     додавай їх вдруге (ALTER ... ADD COLUMN впаде). Замість цього додай:
+       - індекс idx_users_role ON users(role);
+       - таблицю loans (id, user_id, copy_id, issued_by, issued_at, due_at,
+         returned_at) з FK ON DELETE RESTRICT, CHECK (due_at > issued_at),
+         індексами на кожен FK і частковим UNIQUE-індексом по copy_id WHERE
+         returned_at IS NULL (примірник не можна видати двічі).
+     .down.sql має видаляти все у зворотному порядку.
+
+  2) Модель
+     Онови model.User: PasswordHash має тег `json:"-"` (хеш ніколи не
+     серіалізується). Додай константи ролей RoleReader/RoleLibrarian/RoleAdmin.
+
+  3) Пакет internal/auth
+     - HashPassword(password) -> bcrypt.GenerateFromPassword з bcrypt.DefaultCost.
+     - CheckPassword(hash, password) -> bcrypt.CompareHashAndPassword.
+     - GenerateToken(userID, role): jwt.SigningMethodHS256, claims user_id, role,
+       exp = now + 24h (та iat). Секрет читай ВИКЛЮЧНО через
+       os.Getenv("JWT_SECRET"); якщо порожній або коротший за 32 символи —
+       повертай помилку (не використовуй дефолтний секрет).
+     - ParseToken(token): дозволяй лише HS256 (jwt.WithValidMethods) та вимагай
+       exp (jwt.WithExpirationRequired); будь-яку помилку зводь до
+       ErrInvalidToken (прострочений, підроблений, alg=none тощо).
+     - ValidateSecret() для перевірки при старті сервера (log.Fatal у main).
+
+  4) DTO (захист від Mass Assignment)
+     RegisterRequest {email, password, full_name} та LoginRequest {email, password}.
+     Жодних полів id/role/password_hash. Валідація: email за net/mail,
+     нормалізація (trim + lower-case), пароль 8..72 байти (ліміт bcrypt).
+     Декодер тіла має відхиляти невідомі поля (DisallowUnknownFields).
+
+  5) Хендлери internal/handler/auth_handler.go
+     POST /api/v1/auth/register:
+       - хешує пароль, роль завжди "reader" (ігнорує будь-що від клієнта);
+       - дубль email -> HTTP 422, message "email already registered";
+       - успіх -> HTTP 201 з користувачем (без password_hash).
+     POST /api/v1/auth/login:
+       - невідомий email І неправильний пароль -> ОДНАКОВА відповідь HTTP 401
+         з message "invalid credentials" (захист від User Enumeration);
+       - для невідомого email виконай фіктивний bcrypt-compare, щоб вирівняти час;
+       - успіх -> HTTP 200 {"token": "...", "user": {...}}.
+     Репозиторій користувачів — через інтерфейс UserRepository
+     (Create, FindByEmail), запити лише параметризовані.
+
+  6) Вимоги до безпеки
+     Не логуй паролі, хеші й токени; внутрішні помилки не показуй клієнту.
+
+Результат інтеграції:
+  migrations/000003_add_auth_fields.{up,down}.sql, internal/model/user.go,
+  internal/model/auth_input.go, internal/model/loan.go, internal/auth/{password,token}.go,
+  internal/repository/user_repository.go, internal/handler/auth_handler.go.
+
+Ручний огляд результату (що перевірено/виправлено після генерації):
+  * міграція: AI першою версією пропонував ADD COLUMN password_hash/role —
+    це дублювало б 000001, тому у промпт додано явну заборону (пункт 1);
+  * ParseToken: додано WithValidMethods та WithExpirationRequired, бо без них
+    можливі атаки alg=none та токени без терміну дії;
+  * login: додано dummy-compare проти timing-атаки на перебір email.
+
+---------------------------------------------------------------
+ЗАВДАННЯ 2.2 — Ланцюжок middleware (AuthMiddleware + RequireRole)
+---------------------------------------------------------------
+
+Контекст, який передається разом із промптом:
+  * пакет internal/auth (ParseToken повертає *auth.Claims{UserID, Role} або
+    ErrInvalidToken), model.NewErrorResponse(code, message), коди
+    model.CodeUnauthenticated ("unauthenticated") та model.CodeForbidden ("forbidden");
+  * ролі: model.RoleReader / RoleLibrarian / RoleAdmin;
+  * роутер збирається у internal/app/app.go (його викликає cmd/api/main.go).
+
+ПРОМПТ:
+
+  Напиши два Gin-middleware для LibraTrack. Коментарі українською.
+
+  1) internal/middleware/auth.go — AuthMiddleware() gin.HandlerFunc
+     - бере токен із заголовка "Authorization: Bearer <token>";
+     - немає заголовка або схема не Bearer -> 401 "missing or malformed token";
+     - викликає auth.ParseToken (перевіряє підпис HS256 та claim exp); помилка
+       -> 401 "invalid or expired token" (причину не розкривати);
+     - успіх -> c.Set("user_id", claims.UserID), c.Set("role", claims.Role), c.Next().
+
+  2) internal/middleware/rbac.go — RequireRole(allowed ...string) gin.HandlerFunc
+     - variadic; читає c.Get("role");
+     - ролі в контексті немає (користувач не автентифікований) -> 401;
+     - роль є, але її немає серед allowed -> 403 "insufficient permissions";
+     - дозволена роль -> c.Next().
+
+  3) Обидва middleware при відмові МУСЯТЬ викликати c.AbortWithStatusJSON(...)
+     (а не c.JSON), щоб ланцюжок зупинявся і хендлер не виконувався.
+     Формат помилки: {"error": {"code": "...", "message": "..."}}.
+
+  4) Покажи реєстрацію маршрутів з вкладеними групами Gin:
+       api       := r.Group("/api/v1")
+       public    := api.Group("")                                  // без токена
+       protected := api.Group("", AuthMiddleware())                // 401
+       staff     := protected.Group("", RequireRole("librarian","admin"))  // 403
+       admin     := protected.Group("", RequireRole("admin"))
+     Порядок виконання: AuthMiddleware ПЕРЕД RequireRole (staff/admin вкладені
+     в protected). Поясни в коментарі, чому зворотний порядок неможливий:
+     RequireRole читає роль, яку кладе AuthMiddleware.
+     Розподіл: public — register, login, GET books/authors/categories;
+     protected — GET /me/loans; staff — POST/PUT/DELETE каталогу, POST /loans,
+     POST /loans/:id/return; admin — GET /users, PUT /users/:id/role.
+
+Результат інтеграції:
+  internal/middleware/{auth,rbac}.go, маршрути в internal/app/app.go,
+  кожен handler розділено на RegisterPublic (GET) та RegisterStaff (запис).
+  Реєстрація груп лежить в app.NewRouter, який викликає main.go (а не в самому
+  main.go), щоб ту саму конфігурацію маршрутів використовували і сервер, і тести.
+
+Ручний огляд результату:
+  * різниця 401/403: без токена на staff-маршруті має бути 401, а не 403
+    (перевіряється тестом "без токена на staff -> 401");
+  * невідома роль в токені (напр. "hacker") -> 403, бо її немає в allowed;
+  * AbortWithStatusJSON перевірено тестом: хендлер при відмові не викликається.

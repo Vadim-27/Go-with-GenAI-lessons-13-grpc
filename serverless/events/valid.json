@@ -1,0 +1,19 @@
+{
+  "resource": "/webhook",
+  "path": "/webhook",
+  "httpMethod": "POST",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "queryStringParameters": null,
+  "pathParameters": null,
+  "stageVariables": null,
+  "requestContext": {
+    "requestId": "demo-valid-0001",
+    "stage": "dev",
+    "httpMethod": "POST",
+    "path": "/dev/webhook"
+  },
+  "body": "{\"event\": \"book.donated\", \"data\": {\"title\": \"The Go Programming Language\", \"author\": \"Alan Donovan, Brian Kernighan\", \"isbn\": \"978-0-13-419044-0\", \"condition\": \"Good\", \"donor_email\": \"Reader@Example.com\"}}",
+  "isBase64Encoded": false
+}

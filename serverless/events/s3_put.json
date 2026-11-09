@@ -1,0 +1,23 @@
+{
+  "Records": [
+    {
+      "eventVersion": "2.1",
+      "eventSource": "aws:s3",
+      "awsRegion": "us-east-1",
+      "eventTime": "2026-10-22T12:00:00.000Z",
+      "eventName": "ObjectCreated:Put",
+      "s3": {
+        "s3SchemaVersion": "1.0",
+        "configurationId": "demo",
+        "bucket": {
+          "name": "libratrack-covers",
+          "arn": "arn:aws:s3:::libratrack-covers"
+        },
+        "object": {
+          "key": "covers/cover.png",
+          "size": 0
+        }
+      }
+    }
+  ]
+}

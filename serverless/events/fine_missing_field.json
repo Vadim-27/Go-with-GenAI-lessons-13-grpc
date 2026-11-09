@@ -1,0 +1,19 @@
+{
+    "resource":  "/fine",
+    "path":  "/fine",
+    "httpMethod":  "POST",
+    "headers":  {
+                    "Content-Type":  "application/json"
+                },
+    "queryStringParameters":  null,
+    "pathParameters":  null,
+    "stageVariables":  null,
+    "requestContext":  {
+                           "requestId":  "fine-missing-0001",
+                           "stage":  "dev",
+                           "httpMethod":  "POST",
+                           "path":  "/dev/fine"
+                       },
+    "body":  "{\"category\":\"standard\",\"due_date\":\"2026-10-01\"}",
+    "isBase64Encoded":  false
+}
